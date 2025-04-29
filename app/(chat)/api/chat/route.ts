@@ -25,8 +25,10 @@ import { isProductionEnvironment } from '@/lib/constants';
 import { myProvider } from '@/lib/ai/providers';
 import { entitlementsByUserType } from '@/lib/ai/entitlements';
 import { postRequestBodySchema, type PostRequestBody } from './schema';
+import { checkMOEAvailability } from '@/lib/ai/providers/moe';
 
 export const maxDuration = 60;
+export const runtime = 'edge'; // Better Vercel compatibility for streaming responses
 
 export async function POST(request: Request) {
   let requestBody: PostRequestBody;
@@ -37,6 +39,12 @@ export async function POST(request: Request) {
   } catch (_) {
     return new Response('Invalid request body', { status: 400 });
   }
+
+  // Set a global timeout for the entire request
+  const abortController = new AbortController();
+  const timeout = setTimeout(() => {
+    abortController.abort();
+  }, (maxDuration - 5) * 1000); // Leave 5 seconds buffer
 
   try {
     const { id, message, selectedChatModel } = requestBody;
@@ -80,8 +88,7 @@ export async function POST(request: Request) {
     const previousMessages = await getMessagesByChatId({ id });
 
     const messages = appendClientMessage({
-      // @ts-expect-error: todo add type conversion from DBMessage[] to UIMessage[]
-      messages: previousMessages,
+      messages: previousMessages as any, // Type conversion from DBMessage[] to UIMessage[]
       message,
     });
 
@@ -98,15 +105,30 @@ export async function POST(request: Request) {
       ],
     });
 
+    // Check if this is an MOE model request and if the MOE API is available
+    const isMOEModel = selectedChatModel.startsWith('moe-');
+    let moeAvailable = false;
+    
+    if (isMOEModel) {
+      try {
+        moeAvailable = await checkMOEAvailability();
+        if (!moeAvailable) {
+          console.warn(`MOE API unavailable for model ${selectedChatModel}, using fallback handling`);
+        }
+      } catch (error) {
+        console.error('Error checking MOE availability:', error);
+      }
+    }
+
     return createDataStreamResponse({
-      execute: (dataStream) => {
+      execute: (dataStream: any) => {
         const result = streamText({
           model: myProvider.languageModel(selectedChatModel),
           system: systemPrompt({ selectedChatModel }),
           messages,
           maxSteps: 5,
           experimental_activeTools:
-            selectedChatModel === 'chat-model-reasoning'
+            selectedChatModel === 'chat-model-reasoning' || isMOEModel
               ? []
               : [
                   'getWeather',
@@ -125,12 +147,12 @@ export async function POST(request: Request) {
               dataStream,
             }),
           },
-          onFinish: async ({ response }) => {
+          onFinish: async ({ response }: { response: any }) => {
             if (session.user?.id) {
               try {
                 const assistantId = getTrailingMessageId({
                   messages: response.messages.filter(
-                    (message) => message.role === 'assistant',
+                    (message: any) => message.role === 'assistant',
                   ),
                 });
 
@@ -173,11 +195,37 @@ export async function POST(request: Request) {
           sendReasoning: true,
         });
       },
-      onError: () => {
-        return 'Oops, an error occurred!';
+      onError: (error: any) => {
+        clearTimeout(timeout);
+        console.error('Error in chat stream:', error);
+        if (error.name === 'AbortError' || error.message?.includes('timed out')) {
+          return 'The request timed out. Please try again with a shorter message or try later.';
+        }
+        if (isMOEModel && !moeAvailable) {
+          return 'The MOE service is currently unavailable. Your message has been processed using a fallback model instead.';
+        }
+        return 'Oops, an error occurred while processing your request!';
       },
     });
-  } catch (_) {
+  } catch (error) {
+    clearTimeout(timeout);
+    console.error('Error in chat API:', error);
+    
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    
+    if (error instanceof Error && (errorMessage.includes('timed out') || errorMessage.includes('aborted'))) {
+      return new Response('Request timed out. Please try again with a shorter message.', {
+        status: 408, // Request Timeout
+      });
+    }
+    
+    // Handle database connection errors
+    if (errorMessage.includes('database') || errorMessage.includes('connection')) {
+      return new Response('Database connection error. Please try again later.', {
+        status: 503, // Service Unavailable
+      });
+    }
+    
     return new Response('An error occurred while processing your request!', {
       status: 500,
     });

@@ -1,0 +1,39 @@
+{
+    "version": 2,
+    "framework": "nextjs",
+    "buildCommand": "next build",
+    "outputDirectory": ".next",
+    "regions": [
+        "iad1"
+    ],
+    "headers": [
+        {
+            "source": "/(.*)",
+            "headers": [
+                {
+                    "key": "X-Content-Type-Options",
+                    "value": "nosniff"
+                },
+                {
+                    "key": "X-Frame-Options",
+                    "value": "DENY"
+                },
+                {
+                    "key": "X-XSS-Protection",
+                    "value": "1; mode=block"
+                }
+            ]
+        }
+    ],
+    "env": {
+        "MOE_API_URL": "http://localhost:8000",
+        "MOE_TIMEOUT_MS": "30000",
+        "NODE_ENV": "production"
+    },
+    "build": {
+        "env": {
+            "MOE_API_URL": "http://localhost:8000",
+            "MOE_TIMEOUT_MS": "30000"
+        }
+    }
+}
