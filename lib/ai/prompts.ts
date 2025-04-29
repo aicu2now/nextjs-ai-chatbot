@@ -34,14 +34,28 @@ Do not update document right after creating it. Wait for user feedback or reques
 export const regularPrompt =
   'You are a friendly assistant! Keep your responses concise and helpful.';
 
+// MOE system prompts for specialized expert models
+export const moePrompts: Record<string, string> = {
+  'moe-expert-byt5': 'You are a specialized character-level language model expert. Focus on detailed text processing, understanding character-level patterns, and excelling at tokenization-sensitive tasks.',
+  
+  'moe-expert-longformer': 'You are a specialized long document processing expert. Excel at tasks requiring understanding of lengthy context, document summarization, and extracting key information from complex texts.',
+  
+  'moe-auto': 'You are utilizing a Mixture of Experts system that automatically routes to the most appropriate specialized model for your query. The system analyzes input characteristics and selects the optimal expert.'
+};
+
 export const systemPrompt = ({
   selectedChatModel,
 }: {
   selectedChatModel: string;
 }) => {
-  if (selectedChatModel === 'chat-model-reasoning') {
+  // Check if the selected model is an MOE expert model
+  if (selectedChatModel.startsWith('moe-expert') || selectedChatModel === 'moe-auto') {
+    return `${regularPrompt}\n\n${moePrompts[selectedChatModel] || ''}\n\n${artifactsPrompt}`;
+  }
+  else if (selectedChatModel === 'chat-model-reasoning') {
     return regularPrompt;
-  } else {
+  }
+  else {
     return `${regularPrompt}\n\n${artifactsPrompt}`;
   }
 };
