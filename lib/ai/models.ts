@@ -17,4 +17,19 @@ export const chatModels: Array<ChatModel> = [
     name: 'Reasoning model',
     description: 'Uses advanced reasoning',
   },
+  {
+    id: 'moe-expert-byt5',
+    name: 'MOE ByT5 Expert',
+    description: 'Character-level MOE expert for specialized text processing',
+  },
+  {
+    id: 'moe-expert-longformer',
+    name: 'MOE Longformer Expert',
+    description: 'MOE expert for long document processing',
+  },
+  {
+    id: 'moe-auto',
+    name: 'MOE Auto-Routing',
+    description: 'Automatically routes to the best MOE expert',
+  }
 ];

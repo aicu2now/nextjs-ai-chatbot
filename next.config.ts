@@ -11,6 +11,10 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  env: {
+    MOE_API_URL: process.env.MOE_API_URL,
+    MOE_TIMEOUT_MS: process.env.MOE_TIMEOUT_MS,
+  },
 };
 
 export default nextConfig;
